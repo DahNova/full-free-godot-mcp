@@ -1,0 +1,12 @@
+{
+  "name": "godot-mcp-foss-server",
+  "version": "0.1.0",
+  "description": "MCP stdio bridge for the godot-mcp-foss editor addon (JSON-RPC 2.0 over WebSocket).",
+  "license": "MIT",
+  "type": "module",
+  "bin": { "godot-mcp-foss": "src/index.js" },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.0.0",
+    "ws": "^8.18.0"
+  }
+}

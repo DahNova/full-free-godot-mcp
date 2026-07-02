@@ -1,0 +1,190 @@
+// Hand-written MCP tool schemas — the whole point of the clean-room rewrite:
+// every schema here is authored, typed, and documented by us; nothing is
+// derived from any third-party addon.
+
+const CODE_NOTE =
+  " Coroutines are supported (await works). Plain print() goes to the Godot log, not here: use say(v) to collect lines, and end with `return <value>` for a result.";
+
+export const TOOLS = [
+  {
+    name: "editor_status",
+    description:
+      "[editor] Liveness + introspection: engine version, project name, whether a scene is playing, and every available bridge method.",
+    inputSchema: { type: "object", properties: {}, additionalProperties: false },
+  },
+  {
+    name: "editor_exec",
+    description: "[editor] Run GDScript in the EDITOR process (EditorInterface is available)." + CODE_NOTE,
+    inputSchema: {
+      type: "object",
+      properties: {
+        code: { type: "string", description: "GDScript statements (the body of a function)." },
+        timeout_ms: { type: "number", description: "Override the 30s default timeout." },
+      },
+      required: ["code"],
+      additionalProperties: false,
+    },
+  },
+  {
+    name: "editor_log",
+    description: "[editor] Tail the project log (user://logs/godot.log) — reflects the most recent run session.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        max_lines: { type: "number", description: "Lines to return (default 120)." },
+        filter: { type: "string", description: "Only lines containing this substring." },
+      },
+      additionalProperties: false,
+    },
+  },
+  {
+    name: "editor_errors",
+    description: "[editor] Error/warning lines from the project log.",
+    inputSchema: {
+      type: "object",
+      properties: { max_lines: { type: "number", description: "Max error lines (default 60)." } },
+      additionalProperties: false,
+    },
+  },
+  {
+    name: "editor_screenshot",
+    description:
+      "[editor] Save a PNG of the editor window and return its path + size. save_path is required by design — this bridge never returns base64 image blobs.",
+    inputSchema: {
+      type: "object",
+      properties: { save_path: { type: "string", description: "Absolute (or user://) PNG destination." } },
+      required: ["save_path"],
+      additionalProperties: false,
+    },
+  },
+  {
+    name: "rescan_files",
+    description: "[editor] Trigger a resource-filesystem rescan (after files changed outside the editor).",
+    inputSchema: { type: "object", properties: {}, additionalProperties: false },
+  },
+  {
+    name: "scene_tree",
+    description: "[editor] Dump the EDITED scene's node tree (names, types, scripts), depth-capped.",
+    inputSchema: {
+      type: "object",
+      properties: { max_depth: { type: "number", description: "Depth cap (default 6)." } },
+      additionalProperties: false,
+    },
+  },
+  {
+    name: "run_scene",
+    description:
+      "[editor] Play a scene by res:// path. Deliberately refuses the no-arg main-scene boot unless force_main=true (booting every autoload floods output buffers; prefer a light scene path).",
+    inputSchema: {
+      type: "object",
+      properties: {
+        path: { type: "string", description: "res:// path of the scene to play." },
+        force_main: { type: "boolean", description: "Explicitly boot the full main scene." },
+      },
+      additionalProperties: false,
+    },
+  },
+  {
+    name: "stop_scene",
+    description: "[editor] Stop the playing scene.",
+    inputSchema: { type: "object", properties: {}, additionalProperties: false },
+  },
+  {
+    name: "game_exec",
+    description: "[game] Run GDScript inside the RUNNING game (a `scene_tree` var gives the live SceneTree)." + CODE_NOTE,
+    inputSchema: {
+      type: "object",
+      properties: {
+        code: { type: "string", description: "GDScript statements (the body of a function)." },
+        timeout_ms: { type: "number", description: "Override the 10s default timeout." },
+      },
+      required: ["code"],
+      additionalProperties: false,
+    },
+  },
+  {
+    name: "game_screenshot",
+    description:
+      "[game] Save a PNG of the running game's viewport (waits for a fully rendered frame). save_path required — never base64.",
+    inputSchema: {
+      type: "object",
+      properties: { save_path: { type: "string", description: "Absolute (or user://) PNG destination." } },
+      required: ["save_path"],
+      additionalProperties: false,
+    },
+  },
+  {
+    name: "game_tree",
+    description: "[game] Dump the LIVE scene tree from a node path (default /root), depth-capped.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        from: { type: "string", description: "Starting node path (default /root)." },
+        max_depth: { type: "number", description: "Depth cap (default 5)." },
+      },
+      additionalProperties: false,
+    },
+  },
+  {
+    name: "game_node",
+    description: "[game] Read a live node's properties (all script/editor props, or just props[]).",
+    inputSchema: {
+      type: "object",
+      properties: {
+        path: { type: "string", description: "Absolute node path, e.g. /root/Main/Player." },
+        props: { type: "array", items: { type: "string" }, description: "Specific property names." },
+      },
+      required: ["path"],
+      additionalProperties: false,
+    },
+  },
+  {
+    name: "game_set",
+    description:
+      "[game] Set one property on a live node. The JSON value is coerced onto the property's current type (Vector2 accepts {x,y} or [x,y]; Color accepts {r,g,b,a} or a name).",
+    inputSchema: {
+      type: "object",
+      properties: {
+        path: { type: "string", description: "Absolute node path." },
+        property: { type: "string", description: "Property name." },
+        value: { description: "New value (JSON)." },
+      },
+      required: ["path", "property", "value"],
+      additionalProperties: false,
+    },
+  },
+  {
+    name: "game_click",
+    description: "[game] Press the first visible, enabled Button whose text contains `text` (case-insensitive).",
+    inputSchema: {
+      type: "object",
+      properties: { text: { type: "string", description: "Substring of the button label." } },
+      required: ["text"],
+      additionalProperties: false,
+    },
+  },
+  {
+    name: "foss_call",
+    description:
+      "[bridge] Escape hatch: invoke any bridge method by name with free-form params (see editor_status.methods).",
+    inputSchema: {
+      type: "object",
+      properties: {
+        method: { type: "string", description: "Bridge method name." },
+        params: { type: "object", description: "Free-form parameters.", additionalProperties: true },
+      },
+      required: ["method"],
+      additionalProperties: false,
+    },
+  },
+];
+
+// Per-tool default timeouts (ms) where the 30s default is wrong.
+export const TIMEOUTS = {
+  game_exec: 15000,
+  game_screenshot: 8000,
+  game_tree: 8000,
+  game_node: 8000,
+  game_set: 8000,
+  game_click: 8000,
+};
