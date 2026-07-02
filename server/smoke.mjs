@@ -1,7 +1,15 @@
 // Smoke test for the godot-mcp-foss addon over raw WebSocket JSON-RPC.
+//
+// Env (all optional):
+//   SHOT_DIR     where screenshots/captures are written (default: os tmpdir)
+//   SMOKE_SCENE  res:// scene to play for the game-side checks (skipped if unset)
+//   SMOKE_BUTTON label substring of a button that scene shows (wait+click checks)
 import WebSocket from "ws";
+import { tmpdir } from "node:os";
 
-const SHOTS = process.env.SHOT_DIR;
+const SHOTS = (process.env.SHOT_DIR ?? tmpdir()).replaceAll("\\", "/");
+const SCENE = process.env.SMOKE_SCENE ?? "";
+const BUTTON = process.env.SMOKE_BUTTON ?? "";
 const ws = new WebSocket("ws://127.0.0.1:6520");
 let id = 0;
 const pending = new Map();
@@ -70,11 +78,12 @@ ws.on("open", async () => {
     return { all_passed: r.all_passed, tests: r.tests, passing: r.passing };
   });
 
-  if (!wasPlaying) {
-    await check("run_scene title", () => call("run_scene", { path: "res://game/flow/game_root.tscn" }));
-    await check("game_wait PLAY button", async () => {
-      const r = await call("game_wait", { button_text: "PLAY", wait_ms: 15000 }, 20000);
-      if (!r.satisfied) throw new Error("PLAY button never appeared");
+  if (!wasPlaying && SCENE) {
+    await check("run_scene", () => call("run_scene", { path: SCENE }));
+    await check("game_wait", async () => {
+      const cond = BUTTON ? { button_text: BUTTON } : { node: "/root" };
+      const r = await call("game_wait", { ...cond, wait_ms: 15000 }, 20000);
+      if (!r.satisfied) throw new Error("wait condition never satisfied");
       return r;
     });
     await check("game_tree", async () => {
@@ -98,16 +107,22 @@ ws.on("open", async () => {
         code: "await scene_tree.create_timer(0.2).timeout\nsay('game says hi')\nreturn scene_tree.root.get_child_count()",
       })
     );
-    await check("game_click PLAY", () => call("game_click", { text: "PLAY" }));
-    await new Promise((r) => setTimeout(r, 1200));
+    if (BUTTON) {
+      await check("game_click", () => call("game_click", { text: BUTTON }));
+      await new Promise((r) => setTimeout(r, 1200));
+    }
     await check("game_screenshot", () => call("game_screenshot", { save_path: `${SHOTS}/foss_game.png` }));
     await check("game_node", async () => {
-      const r = await call("game_node", { path: "/root/GameRoot", props: ["name"] });
+      const r = await call("game_node", { path: "/root", props: ["name"] });
       return r;
     });
     await check("stop_scene", () => call("stop_scene"));
   } else {
-    results.push("SKIP game_* tests: a scene is already playing (not mine to stop)");
+    results.push(
+      wasPlaying
+        ? "SKIP game_* tests: a scene is already playing (not mine to stop)"
+        : "SKIP game_* tests: set SMOKE_SCENE (and optionally SMOKE_BUTTON) to enable them"
+    );
   }
 
   console.log(results.join("\n"));

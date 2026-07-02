@@ -96,6 +96,13 @@ With the editor open and the plugin enabled:
 cd server && node smoke.mjs
 ```
 
+Editor-side checks always run. To also exercise the game-side tools, point it
+at a light scene of your project (and optionally a button label it shows):
+
+```
+SMOKE_SCENE=res://main_menu.tscn SMOKE_BUTTON=PLAY node smoke.mjs
+```
+
 ## License
 
 MIT — see [LICENSE](LICENSE).
