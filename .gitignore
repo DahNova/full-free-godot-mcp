@@ -2,3 +2,4 @@ node_modules/
 *.log
 .godot/
 *.uid
+*_tmp.mjs
