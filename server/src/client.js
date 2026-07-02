@@ -106,7 +106,7 @@ export class FossClient {
       return Promise.reject(
         new RpcError(
           -32003,
-          `not connected to the Godot editor (${this.url}). Is the editor open with the godot-mcp-foss plugin enabled?`
+          `not connected to the Godot editor (${this.url}). Is the editor open with the godot-mcp-foss plugin enabled? The editor_launch tool can start it.`
         )
       );
     }

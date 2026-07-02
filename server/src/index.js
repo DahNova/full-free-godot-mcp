@@ -6,6 +6,7 @@ import { Server } from "@modelcontextprotocol/sdk/server/index.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { CallToolRequestSchema, ListToolsRequestSchema } from "@modelcontextprotocol/sdk/types.js";
 import { FossClient, RpcError } from "./client.js";
+import { launchEditor } from "./launcher.js";
 import { TOOLS, TIMEOUTS } from "./tools.js";
 
 const log = (...a) => process.stderr.write(`[mcp-foss] ${a.join(" ")}\n`);
@@ -31,7 +32,7 @@ async function main() {
   client.start();
 
   const server = new Server(
-    { name: "godot-mcp-foss", version: "0.3.0" },
+    { name: "godot-mcp-foss", version: "0.4.0" },
     { capabilities: { tools: {} } }
   );
 
@@ -41,6 +42,21 @@ async function main() {
   server.setRequestHandler(CallToolRequestSchema, async (req) => {
     const { name, arguments: args = {} } = req.params;
     try {
+      if (name === "editor_launch") {
+        if (client.connected) return toContent({ already_running: true, connected: true });
+        let info;
+        try {
+          info = launchEditor({ godotBin: args.godot_bin, project: args.project });
+        } catch (e) {
+          return toError(e.message);
+        }
+        const waitMs = args.wait_ms ?? 60000;
+        const t0 = Date.now();
+        while (!client.connected && Date.now() - t0 < waitMs) {
+          await new Promise((r) => setTimeout(r, 500));
+        }
+        return toContent({ launched: true, ...info, connected: client.connected });
+      }
       if (name === "foss_call") {
         if (!args.method) return toError("foss_call requires 'method'.");
         return toContent(await client.call(args.method, args.params ?? {}));

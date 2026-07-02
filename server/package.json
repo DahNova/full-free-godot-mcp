@@ -1,6 +1,6 @@
 {
   "name": "godot-mcp-foss-server",
-  "version": "0.3.0",
+  "version": "0.4.0",
   "description": "MCP stdio bridge for the godot-mcp-foss editor addon (JSON-RPC 2.0 over WebSocket).",
   "license": "MIT",
   "type": "module",

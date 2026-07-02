@@ -311,6 +311,20 @@ export const TOOLS = [
     },
   },
   {
+    name: "editor_launch",
+    description:
+      "[server] (Re)start the Godot EDITOR itself when it is closed or crashed — the one thing the in-editor addon cannot do. Spawns the editor detached on the project and waits for the addon to reconnect. Binary from godot_bin arg or GODOT_BIN env; project from arg, GODOT_PROJECT_ROOT env, or cwd walk-up.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        godot_bin: { type: "string", description: "Path to the Godot executable (fallback: GODOT_BIN env, PATH)." },
+        project: { type: "string", description: "Project dir containing project.godot (fallback: env, cwd walk-up)." },
+        wait_ms: { type: "number", description: "How long to wait for the addon to reconnect (default 60000)." },
+      },
+      additionalProperties: false,
+    },
+  },
+  {
     name: "foss_call",
     description:
       "[bridge] Escape hatch: invoke any bridge method by name with free-form params (see editor_status.methods).",
