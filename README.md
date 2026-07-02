@@ -1,6 +1,6 @@
-# godot-mcp-foss
+# full-free-godot-mcp
 
-**Open-source MCP stack for Godot 4.x** — an editor addon (GDScript) plus an
+**Open-source MCP stack for Godot 4.x** (project codename `godot-mcp-foss`) — an editor addon (GDScript) plus an
 MCP stdio server (Node) that let an AI assistant (or any JSON-RPC client)
 inspect and drive the Godot editor **and the running game**. MIT licensed,
 written **from scratch** (clean-room: no code, names or schemas from any
