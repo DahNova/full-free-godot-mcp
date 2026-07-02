@@ -6,7 +6,7 @@ inspect and drive the Godot editor **and the running game**. MIT licensed,
 written **from scratch** (clean-room: no code, names or schemas from any
 commercial addon).
 
-> Stato: **v0.2.0 — funzionante.** 24/24 smoke checks live su Godot 4.4.1.
+> Stato: **v0.3.0 — funzionante.** 28/28 smoke checks live su Godot 4.4.1.
 
 ## Layout
 
@@ -46,13 +46,27 @@ docs/PROTOCOL.md         wire protocol + method reference
 
 Port override on both sides: `GODOT_MCP_FOSS_PORT`.
 
-## The 22 tools
+## The 26 tools
 
 `editor_status` · `editor_exec` · `editor_log` · `editor_errors` ·
 `editor_screenshot` · `rescan_files` · `validate_scripts` · `run_tests` ·
-`scene_tree` · `run_scene` · `stop_scene` · `game_exec` · `game_screenshot` ·
-`game_tree` · `game_node` · `game_set` · `game_click` · `game_input` ·
-`game_wait` · `game_perf` · `game_capture` · `foss_call` (escape hatch)
+`run_task` · `compare_shots` · `scene_tree` · `run_scene` · `stop_scene` ·
+`game_exec` · `game_run_script` · `game_screenshot` · `game_tree` ·
+`game_node` · `game_set` · `game_click` · `game_input` · `game_wait` ·
+`game_perf` · `game_perf_series` · `game_capture` · `foss_call` (escape hatch)
+
+The v0.3 additions make the stack *project-aware*:
+
+- **`run_task`** — the host project declares its own automation surface in
+  `res://mcp_tasks.json` (each task = a versioned script with `run(args)`);
+  the AI invokes rituals by name: parity re-certs, content lints, balance
+  smokes. Nothing project-specific ever leaks into the addon.
+- **`game_run_script`** — run a versioned res:// driver file inside the
+  running game: repeatable e2e scenarios live in the repo, not in chat.
+- **`compare_shots`** — PNG diff (identical fast path + downsampled
+  percentage): visual-regression checks for UI work.
+- **`game_perf_series`** — sampled fps/memory/orphans over a window: catch
+  leaks and hitches during real gameplay, not just at a single instant.
 
 The v0.2 additions target the whole edit-test-observe loop, not just remote
 control:

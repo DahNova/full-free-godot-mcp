@@ -27,7 +27,7 @@ Handlers are coroutines: a slow command (or one that awaits signals/timers)
 never blocks the socket loop; responses are correlated by `id` and sent when
 the handler completes.
 
-## Methods (21)
+## Methods (25)
 
 | method | params | notes |
 |---|---|---|
@@ -52,6 +52,23 @@ the handler completes.
 | `game_wait` | `node?` \| `button_text?` \| `property?{path,name,equals}`, `wait_ms?`, `poll_ms?` | polls until the condition holds — the clean way to ride out fades/async transitions |
 | `game_perf` | — | Performance-monitor snapshot: fps, frame times, memory, node/orphan counts, draw calls |
 | `game_capture` | `save_dir`, `count?`, `interval_ms?`, `prefix?` | burst of sequential frames as PNGs (animation review) |
+| `run_task` | `name?`, `args?` | PROJECT-DEFINED task from `res://mcp_tasks.json` (script with `run(args)`, may await); no name = list |
+| `compare_shots` | `a`, `b` | exact-identical fast path, else downsampled pixel-diff `{changed_px_pct, diff_pct}` |
+| `game_run_script` | `path`, `args?` | run a res:// GDScript FILE in the game (contract: `extends RefCounted`, `func run(args)`, optional `scene_tree` property injected) |
+| `game_perf_series` | `duration_ms?`, `interval_ms?` | monitor sampling window → fps min/avg/max, memory delta, peak orphans |
+
+### Project task manifest (`res://mcp_tasks.json`)
+
+```json
+{ "tasks": { "parity_recert": {
+    "script": "res://tools/mcp_tasks/parity_recert.gd",
+    "desc": "Golden byte-compare + PRNG self-check" } } }
+```
+
+Task scripts and `game_run_script` drivers share one contract: `extends
+RefCounted`, `func run(args: Dictionary)` (may await, return value is
+serialized back). This is the per-project automation surface — rituals live
+versioned in the host repo, not in the addon and not in chat.
 
 ## Runtime channel (editor ⇄ game)
 

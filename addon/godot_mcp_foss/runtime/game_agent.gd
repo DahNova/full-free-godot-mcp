@@ -71,7 +71,9 @@ func _handle(req_path: String) -> void:
 		"input": out = await _input_event(params)
 		"wait": out = await _wait(params)
 		"perf": out = _perf(params)
+		"perf_series": out = await _perf_series(params)
 		"capture": out = await _capture(params)
+		"run_script": out = await _run_script(params)
 		_: out = {"__error": "unknown runtime method '%s'" % method}
 	var payload: Dictionary
 	if out.has("__error"):
@@ -209,6 +211,63 @@ func _node_set(params: Dictionary) -> Dictionary:
 	var coerced = J.coerce(params.get("value"), node.get(prop))
 	node.set(prop, coerced)
 	return {"path": path, "property": prop, "value": J.jsonify(node.get(prop))}
+
+
+## Run a res:// script FILE inside the game. Contract: extends RefCounted with
+## `func run(args: Dictionary)` (may await). A `scene_tree` property, when
+## declared, is injected with the live SceneTree. Keeps repeatable e2e drivers
+## versioned in the repo instead of retyped inline.
+func _run_script(params: Dictionary) -> Dictionary:
+	var path := String(params.get("path", ""))
+	if path == "" or not FileAccess.file_exists(path):
+		return {"__error": "run_script: script not found: %s" % path}
+	var scr = ResourceLoader.load(path, "GDScript", ResourceLoader.CACHE_MODE_REPLACE)
+	if scr == null:
+		return {"__error": "run_script: failed to load/parse %s" % path}
+	var inst = scr.new()
+	if not inst.has_method("run"):
+		return {"__error": "run_script: %s must implement `func run(args: Dictionary)`" % path}
+	if "scene_tree" in inst:
+		inst.scene_tree = get_tree()
+	var args: Dictionary = params.get("args", {}) if params.get("args") is Dictionary else {}
+	var value = await inst.run(args)
+	return {"script": path, "value": J.jsonify(value)}
+
+
+## Sample the performance monitors over a window; series capped at 100 points.
+func _perf_series(params: Dictionary) -> Dictionary:
+	var duration_ms := clampi(int(params.get("duration_ms", 5000)), 250, 60000)
+	var interval_ms := clampi(int(params.get("interval_ms", 250)), 50, 5000)
+	var samples: Array = []
+	var elapsed := 0
+	while elapsed <= duration_ms and samples.size() < 100:
+		samples.append(_perf({}))
+		if elapsed + interval_ms > duration_ms:
+			break
+		await get_tree().create_timer(float(interval_ms) / 1000.0).timeout
+		elapsed += interval_ms
+	var fps_min := 1e9
+	var fps_max := 0.0
+	var fps_sum := 0.0
+	var orphans_max := 0
+	for s in samples:
+		var f := float(s["fps"])
+		fps_min = minf(fps_min, f)
+		fps_max = maxf(fps_max, f)
+		fps_sum += f
+		orphans_max = maxi(orphans_max, int(s["orphan_nodes"]))
+	var first: Dictionary = samples[0]
+	var last: Dictionary = samples[samples.size() - 1]
+	return {
+		"samples": samples.size(),
+		"duration_ms": elapsed,
+		"fps": {"min": fps_min, "avg": fps_sum / samples.size(), "max": fps_max},
+		"memory_mb": {"start": first["static_memory_mb"], "end": last["static_memory_mb"],
+			"delta": float(last["static_memory_mb"]) - float(first["static_memory_mb"])},
+		"nodes": {"start": first["nodes"], "end": last["nodes"]},
+		"orphan_nodes_peak": orphans_max,
+		"draw_calls_last": last["draw_calls"],
+	}
 
 
 func _find_button(node: Node, needle: String) -> Button:

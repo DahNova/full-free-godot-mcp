@@ -10,6 +10,7 @@ import { tmpdir } from "node:os";
 const SHOTS = (process.env.SHOT_DIR ?? tmpdir()).replaceAll("\\", "/");
 const SCENE = process.env.SMOKE_SCENE ?? "";
 const BUTTON = process.env.SMOKE_BUTTON ?? "";
+const GAME_SCRIPT = process.env.SMOKE_GAME_SCRIPT ?? ""; // res:// driver for game_run_script
 const ws = new WebSocket("ws://127.0.0.1:6520");
 let id = 0;
 const pending = new Map();
@@ -77,6 +78,19 @@ ws.on("open", async () => {
     const r = await call("run_tests", {}, 200000);
     return { all_passed: r.all_passed, tests: r.tests, passing: r.passing };
   });
+  await check("compare_shots identical", async () => {
+    const r = await call("compare_shots", { a: `${SHOTS}/foss_editor.png`, b: `${SHOTS}/foss_editor.png` });
+    if (!r.identical) throw new Error("same file must be identical");
+    return r;
+  });
+  if (status.has_task_manifest) {
+    await check("run_task list", async () => {
+      const r = await call("run_task", {});
+      return { tasks: Object.keys(r.tasks) };
+    });
+  } else {
+    await check("run_task no manifest", () => call("run_task", {}), true);
+  }
 
   if (!wasPlaying && SCENE) {
     await check("run_scene", () => call("run_scene", { path: SCENE }));
@@ -107,6 +121,16 @@ ws.on("open", async () => {
         code: "await scene_tree.create_timer(0.2).timeout\nsay('game says hi')\nreturn scene_tree.root.get_child_count()",
       })
     );
+    await check("game_perf_series", async () => {
+      const r = await call("game_perf_series", { duration_ms: 1500, interval_ms: 250 }, 10000);
+      return { samples: r.samples, fps_avg: Math.round(r.fps.avg), mem_delta: r.memory_mb.delta.toFixed(2) };
+    });
+    if (GAME_SCRIPT) {
+      await check("game_run_script", async () => {
+        const r = await call("game_run_script", { path: GAME_SCRIPT });
+        return r.value;
+      });
+    }
     if (BUTTON) {
       await check("game_click", () => call("game_click", { text: BUTTON }));
       await new Promise((r) => setTimeout(r, 1200));

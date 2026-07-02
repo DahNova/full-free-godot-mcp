@@ -38,6 +38,11 @@ func register(router: RefCounted) -> void:
 	router.register("game_capture", func(p): return await _relay("capture", p,
 			int(p.get("count", 8)) * int(p.get("interval_ms", 200)) + 8000),
 		"Capture a burst of sequential frames as PNGs into save_dir (for reviewing animations).")
+	router.register("game_run_script", func(p): return await _relay("run_script", p, p.get("timeout_ms", 30000)),
+		"Run a res:// GDScript FILE inside the running game (contract: extends RefCounted, func run(args) — may await; a scene_tree property is injected). Versioned e2e drivers live in the repo, not in chat.")
+	router.register("game_perf_series", func(p): return await _relay("perf_series", p,
+			int(p.get("duration_ms", 5000)) + 5000),
+		"Sample the performance monitors for duration_ms and return min/avg/max fps, memory delta, peak orphans — leak and hitch detection while the game runs.")
 
 
 func _relay(method: String, params: Dictionary, timeout_ms) -> Dictionary:

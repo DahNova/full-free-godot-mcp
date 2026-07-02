@@ -32,6 +32,81 @@ func register(router: RefCounted) -> void:
 		"Compile-check GDScript files (all of res:// or just paths[]) without running anything; returns the files that fail to parse.")
 	router.register("run_tests", _run_tests,
 		"Run the project's GUT test suite headless in a separate process and return the parsed summary.")
+	router.register("run_task", _run_task,
+		"Run a PROJECT-DEFINED task from res://mcp_tasks.json (name -> script with run(args)). No name = list available tasks.")
+	router.register("compare_shots", _compare_shots,
+		"Compare two PNG screenshots: exact-identical fast path + downsampled pixel-diff percentage.")
+
+
+## Project task runner. The HOST project declares its own automation surface in
+## res://mcp_tasks.json:  {"tasks": {"<name>": {"script": "res://...gd", "desc": "..."}}}
+## Each task script extends RefCounted and implements `func run(args: Dictionary)`
+## (may await; return value is jsonified). This keeps project-specific rituals
+## (parity re-certs, content lints, balance smokes...) OUT of the addon.
+func _run_task(params: Dictionary):
+	var manifest_path := "res://mcp_tasks.json"
+	if not FileAccess.file_exists(manifest_path):
+		return {"__error": "run_task: this project defines no %s" % manifest_path}
+	var data = JSON.parse_string(FileAccess.get_file_as_string(manifest_path))
+	if not (data is Dictionary) or not (data.get("tasks") is Dictionary):
+		return {"__error": "run_task: %s is malformed (want {tasks:{name:{script,desc}}})" % manifest_path}
+	var tasks: Dictionary = data["tasks"]
+	var name := String(params.get("name", ""))
+	if name == "":
+		var listing := {}
+		for k in tasks:
+			listing[k] = String((tasks[k] as Dictionary).get("desc", ""))
+		return {"tasks": listing}
+	if not tasks.has(name):
+		return {"__error": "run_task: unknown task '%s' (available: %s)" % [name, ", ".join(tasks.keys())]}
+	var script_path := String((tasks[name] as Dictionary).get("script", ""))
+	var scr = ResourceLoader.load(script_path, "GDScript", ResourceLoader.CACHE_MODE_REPLACE)
+	if scr == null:
+		return {"__error": "run_task: task script failed to load/parse: %s" % script_path}
+	var inst = scr.new()
+	if not inst.has_method("run"):
+		return {"__error": "run_task: %s must implement `func run(args: Dictionary)`" % script_path}
+	var args: Dictionary = params.get("args", {}) if params.get("args") is Dictionary else {}
+	var value = await inst.run(args)
+	return {"task": name, "value": J.jsonify(value)}
+
+
+func _compare_shots(params: Dictionary):
+	var a_path := String(params.get("a", ""))
+	var b_path := String(params.get("b", ""))
+	if a_path == "" or b_path == "":
+		return {"__error": "compare_shots: 'a' and 'b' PNG paths are required"}
+	var a := Image.load_from_file(a_path)
+	var b := Image.load_from_file(b_path)
+	if a == null or b == null:
+		return {"__error": "compare_shots: could not load one of the images"}
+	if a.get_size() != b.get_size():
+		return {"identical": false, "size_mismatch": true,
+			"a_size": [a.get_width(), a.get_height()], "b_size": [b.get_width(), b.get_height()]}
+	if a.get_data() == b.get_data():
+		return {"identical": true, "diff_pct": 0.0}
+	# Not byte-identical: quantify on a downsample (a full-res per-pixel loop in
+	# GDScript would take seconds on a 720p shot; 128px wide is plenty to rank
+	# "same-ish" vs "changed").
+	var w := 128
+	var h := maxi(1, int(a.get_height() * 128.0 / maxi(1, a.get_width())))
+	a.resize(w, h, Image.INTERPOLATE_BILINEAR)
+	b.resize(w, h, Image.INTERPOLATE_BILINEAR)
+	var changed := 0
+	var total_delta := 0.0
+	for y in h:
+		for x in w:
+			var ca := a.get_pixel(x, y)
+			var cb := b.get_pixel(x, y)
+			var d: float = abs(ca.r - cb.r) + abs(ca.g - cb.g) + abs(ca.b - cb.b)
+			if d > 0.02:
+				changed += 1
+			total_delta += d / 3.0
+	return {
+		"identical": false,
+		"changed_px_pct": 100.0 * float(changed) / float(w * h),
+		"diff_pct": 100.0 * total_delta / float(w * h),
+	}
 
 
 func _validate_scripts(params: Dictionary) -> Dictionary:
@@ -128,10 +203,20 @@ func _count_after(text: String, label: String) -> int:
 
 
 func _status(_params: Dictionary) -> Dictionary:
+	var autoloads := {}
+	for prop in ProjectSettings.get_property_list():
+		var pname := String(prop["name"])
+		if pname.begins_with("autoload/"):
+			autoloads[pname.trim_prefix("autoload/")] = String(ProjectSettings.get_setting(pname, ""))
 	return {
 		"engine": Engine.get_version_info()["string"],
-		"addon": "godot-mcp-foss 0.2.0",
+		"addon": "godot-mcp-foss 0.3.0",
 		"project": String(ProjectSettings.get_setting("application/config/name", "")),
+		"main_scene": String(ProjectSettings.get_setting("application/run/main_scene", "")),
+		"window": [int(ProjectSettings.get_setting("display/window/size/viewport_width", 0)),
+			int(ProjectSettings.get_setting("display/window/size/viewport_height", 0))],
+		"autoloads": autoloads,
+		"has_task_manifest": FileAccess.file_exists("res://mcp_tasks.json"),
 		"playing": EditorInterface.is_playing_scene(),
 		"methods": _router.describe() if _router != null else {},
 	}

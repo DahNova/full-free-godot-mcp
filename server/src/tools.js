@@ -255,6 +255,62 @@ export const TOOLS = [
     },
   },
   {
+    name: "run_task",
+    description:
+      "[editor] Run a PROJECT-DEFINED task from res://mcp_tasks.json (each task = a script implementing run(args), may await). Call with no name to list the project's tasks. This is the per-project automation surface: parity re-certs, content lints, balance smokes…",
+    inputSchema: {
+      type: "object",
+      properties: {
+        name: { type: "string", description: "Task name (omit to list available tasks)." },
+        args: { type: "object", description: "Free-form args handed to the task.", additionalProperties: true },
+        timeout_ms: { type: "number", description: "Override the 120s default." },
+      },
+      additionalProperties: false,
+    },
+  },
+  {
+    name: "compare_shots",
+    description:
+      "[editor] Compare two PNG screenshots: exact-identical fast path, else downsampled pixel-diff ({changed_px_pct, diff_pct}). Visual-regression checks for UI work.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        a: { type: "string", description: "First PNG path." },
+        b: { type: "string", description: "Second PNG path." },
+      },
+      required: ["a", "b"],
+      additionalProperties: false,
+    },
+  },
+  {
+    name: "game_run_script",
+    description:
+      "[game] Run a res:// GDScript FILE inside the running game (contract: extends RefCounted, func run(args) — may await; scene_tree injected if declared). Keep repeatable e2e drivers versioned in the repo.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        path: { type: "string", description: "res:// path of the driver script." },
+        args: { type: "object", description: "Free-form args handed to run().", additionalProperties: true },
+        timeout_ms: { type: "number", description: "Override the 30s default." },
+      },
+      required: ["path"],
+      additionalProperties: false,
+    },
+  },
+  {
+    name: "game_perf_series",
+    description:
+      "[game] Sample the performance monitors for duration_ms (interval_ms apart, max 100 samples) and return fps min/avg/max, memory start/end/delta, peak orphan nodes — catch leaks and hitches during real gameplay.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        duration_ms: { type: "number", description: "Sampling window, 250-60000 (default 5000)." },
+        interval_ms: { type: "number", description: "Sample spacing, 50-5000 (default 250)." },
+      },
+      additionalProperties: false,
+    },
+  },
+  {
     name: "foss_call",
     description:
       "[bridge] Escape hatch: invoke any bridge method by name with free-form params (see editor_status.methods).",
@@ -284,4 +340,7 @@ export const TIMEOUTS = {
   game_capture: 130000, // the addon relay budgets count*interval + 8s
   run_tests: 200000,
   validate_scripts: 60000,
+  run_task: 120000,
+  game_run_script: 35000,
+  game_perf_series: 70000, // the addon relay already budgets duration_ms + 5s
 };
