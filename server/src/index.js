@@ -46,9 +46,10 @@ async function main() {
         return toContent(await client.call(args.method, args.params ?? {}));
       }
       if (!known.has(name)) return toError(`Unknown tool: ${name}`);
-      const { timeout_ms, ...params } = args;
-      const timeout = timeout_ms ?? TIMEOUTS[name] ?? null;
-      return toContent(await client.call(name, params, timeout));
+      // timeout_ms is deliberately passed THROUGH to the addon too: the
+      // game-relay commands budget their file-IPC wait from it.
+      const timeout = args.timeout_ms ?? TIMEOUTS[name] ?? null;
+      return toContent(await client.call(name, args, timeout));
     } catch (e) {
       if (e instanceof RpcError) return toError(`Godot bridge error ${e.code}: ${e.message}`);
       return toError(e.message);
