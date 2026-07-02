@@ -6,7 +6,7 @@ inspect and drive the Godot editor **and the running game**. MIT licensed,
 written **from scratch** (clean-room: no code, names or schemas from any
 commercial addon).
 
-> Stato: **v0.1.0 — funzionante.** 16/16 smoke checks live su Godot 4.4.1.
+> Stato: **v0.2.0 — funzionante.** 24/24 smoke checks live su Godot 4.4.1.
 
 ## Layout
 
@@ -46,12 +46,30 @@ docs/PROTOCOL.md         wire protocol + method reference
 
 Port override on both sides: `GODOT_MCP_FOSS_PORT`.
 
-## The 16 tools
+## The 22 tools
 
 `editor_status` · `editor_exec` · `editor_log` · `editor_errors` ·
-`editor_screenshot` · `rescan_files` · `scene_tree` · `run_scene` ·
-`stop_scene` · `game_exec` · `game_screenshot` · `game_tree` · `game_node` ·
-`game_set` · `game_click` · `foss_call` (escape hatch)
+`editor_screenshot` · `rescan_files` · `validate_scripts` · `run_tests` ·
+`scene_tree` · `run_scene` · `stop_scene` · `game_exec` · `game_screenshot` ·
+`game_tree` · `game_node` · `game_set` · `game_click` · `game_input` ·
+`game_wait` · `game_perf` · `game_capture` · `foss_call` (escape hatch)
+
+The v0.2 additions target the whole edit-test-observe loop, not just remote
+control:
+
+- **`run_tests`** — the addon spawns a headless Godot child process, runs the
+  project's GUT suite and returns the parsed summary. CI-grade feedback
+  without leaving the conversation.
+- **`validate_scripts`** — proactive parse check of every `.gd` from disk,
+  in project context. Catch the typo before booting anything.
+- **`game_wait`** — wait for a node / clickable button / property value:
+  replaces "sleep and hope" around fades and async transitions.
+- **`game_input`** — synthetic key/mouse/action events for flows a
+  button-click can't reach.
+- **`game_perf`** — fps, frame times, memory, orphan nodes, draw calls in one
+  snapshot: leak and runaway detection while you play.
+- **`game_capture`** — a burst of sequential frames for reviewing animations
+  and VFX timing.
 
 Design choices that differ from prior art on purpose:
 

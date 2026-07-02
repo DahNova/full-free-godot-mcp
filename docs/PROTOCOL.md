@@ -27,7 +27,7 @@ Handlers are coroutines: a slow command (or one that awaits signals/timers)
 never blocks the socket loop; responses are correlated by `id` and sent when
 the handler completes.
 
-## Methods (15)
+## Methods (21)
 
 | method | params | notes |
 |---|---|---|
@@ -46,6 +46,12 @@ the handler completes.
 | `game_node` | `path`, `props?` | property read |
 | `game_set` | `path`, `property`, `value` | JSON value coerced onto the property's current type |
 | `game_click` | `text` | presses the first visible enabled Button whose text contains `text` |
+| `validate_scripts` | `paths?`, `include_addons?` | compile-check .gd files from disk in project context (class_name / cyclic preloads resolve); no execution |
+| `run_tests` | `dir?`, `timeout_ms?` | runs GUT headless in a worker-thread child process; returns `{all_passed, tests, passing, failing, tail}` |
+| `game_input` | `kind` (`key`\|`mouse`\|`action`) + fields, `tap?` | synthetic input via `Input.parse_input_event` / action press |
+| `game_wait` | `node?` \| `button_text?` \| `property?{path,name,equals}`, `wait_ms?`, `poll_ms?` | polls until the condition holds — the clean way to ride out fades/async transitions |
+| `game_perf` | — | Performance-monitor snapshot: fps, frame times, memory, node/orphan counts, draw calls |
+| `game_capture` | `save_dir`, `count?`, `interval_ms?`, `prefix?` | burst of sequential frames as PNGs (animation review) |
 
 ## Runtime channel (editor ⇄ game)
 
@@ -62,5 +68,18 @@ The game agent (autoload injected by the plugin) polls at 20 Hz, deletes the
 request once read, and writes the response **atomically** (tmp file + rename)
 so the editor can never read a half-written reply. Id-in-filename means
 concurrent commands cannot clobber each other. Stale `mcp_foss_*` files are
-swept at game start. The agent is inert in exported builds
+swept at game start — except **requests younger than 10 s**, which may have
+been queued by the editor while the game was still booting (e.g. `game_wait`
+right after `run_scene`). The agent is inert in exported builds
 (`OS.has_feature("editor")` gate).
+
+## Known Godot quirks handled
+
+- `JSON.stringify` leaks raw control bytes (CR, ANSI ESC) through string
+  values; the WS server strips every raw control byte from serialized frames
+  (all legitimate ones are already escaped at that point).
+- Compiling a script's raw source detached from the project false-positives on
+  cyclic preload chains — `validate_scripts` therefore reloads through
+  `ResourceLoader` with `CACHE_MODE_REPLACE`.
+- `OS.execute` blocks, so `run_tests` runs it on a `Thread` while the command
+  coroutine keeps the editor responsive via scene-tree timers.

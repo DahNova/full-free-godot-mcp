@@ -31,7 +31,7 @@ async function main() {
   client.start();
 
   const server = new Server(
-    { name: "godot-mcp-foss", version: "0.1.0" },
+    { name: "godot-mcp-foss", version: "0.2.0" },
     { capabilities: { tools: {} } }
   );
 

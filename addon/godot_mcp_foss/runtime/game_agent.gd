@@ -68,6 +68,10 @@ func _handle(req_path: String) -> void:
 		"node_get": out = _node_get(params)
 		"node_set": out = _node_set(params)
 		"click": out = _click(params)
+		"input": out = await _input_event(params)
+		"wait": out = await _wait(params)
+		"perf": out = _perf(params)
+		"capture": out = await _capture(params)
 		_: out = {"__error": "unknown runtime method '%s'" % method}
 	var payload: Dictionary
 	if out.has("__error"):
@@ -89,14 +93,21 @@ func _write_atomic(path: String, text: String) -> void:
 
 
 func _cleanup_stale() -> void:
+	# Sweep leftovers from dead sessions — but NOT fresh requests: the editor
+	# may legitimately have queued a command while this game was still booting
+	# (e.g. game_wait right after run_scene), and eating it would strand the
+	# editor's relay until its timeout.
 	var dir := DirAccess.open("user://")
 	if dir == null:
 		return
+	var now := int(Time.get_unix_time_from_system())
 	dir.list_dir_begin()
 	var fname := dir.get_next()
 	while fname != "":
 		if fname.begins_with("mcp_foss_"):
-			dir.remove(fname)
+			var age := now - int(FileAccess.get_modified_time("user://" + fname))
+			if not fname.begins_with(REQ_PREFIX) or age > 10:
+				dir.remove(fname)
 		fname = dir.get_next()
 	dir.list_dir_end()
 
@@ -222,3 +233,123 @@ func _click(params: Dictionary) -> Dictionary:
 	var path := String(btn.get_path())
 	btn.pressed.emit()
 	return {"clicked": true, "button_path": path, "button_text": btn.text}
+
+
+func _input_event(params: Dictionary) -> Dictionary:
+	var kind := String(params.get("kind", ""))
+	var tap := bool(params.get("tap", true))
+	match kind:
+		"key":
+			var key_name := String(params.get("key", ""))
+			var code := OS.find_keycode_from_string(key_name)
+			if code == KEY_NONE:
+				return {"__error": "input: unknown key '%s' (use Godot key names, e.g. Enter, Escape, A)" % key_name}
+			var ev := InputEventKey.new()
+			ev.keycode = code
+			ev.physical_keycode = code
+			ev.pressed = true
+			Input.parse_input_event(ev)
+			if tap:
+				await get_tree().process_frame
+				var up := InputEventKey.new()
+				up.keycode = code
+				up.physical_keycode = code
+				up.pressed = false
+				Input.parse_input_event(up)
+			return {"sent": "key", "key": key_name, "tap": tap}
+		"mouse":
+			var pos := Vector2(float(params.get("x", 0)), float(params.get("y", 0)))
+			var btn_idx := int(params.get("button", MOUSE_BUTTON_LEFT))
+			var down := InputEventMouseButton.new()
+			down.position = pos
+			down.global_position = pos
+			down.button_index = btn_idx
+			down.pressed = true
+			Input.parse_input_event(down)
+			if tap:
+				await get_tree().process_frame
+				var up := InputEventMouseButton.new()
+				up.position = pos
+				up.global_position = pos
+				up.button_index = btn_idx
+				up.pressed = false
+				Input.parse_input_event(up)
+			return {"sent": "mouse", "x": pos.x, "y": pos.y, "button": btn_idx, "tap": tap}
+		"action":
+			var action := String(params.get("action", ""))
+			if not InputMap.has_action(action):
+				return {"__error": "input: unknown action '%s'" % action}
+			Input.action_press(action)
+			if tap:
+				await get_tree().process_frame
+				Input.action_release(action)
+			return {"sent": "action", "action": action, "tap": tap}
+		_:
+			return {"__error": "input: 'kind' must be key | mouse | action"}
+
+
+## Poll until a condition holds: node exists (`node`), a visible enabled button
+## matching `button_text` exists, or `property` {path,name,equals} matches.
+func _wait(params: Dictionary) -> Dictionary:
+	if not (params.has("node") or params.has("button_text") or params.has("property")):
+		return {"__error": "wait: pass one of node | button_text | property{path,name,equals}"}
+	var wait_ms := int(params.get("wait_ms", 5000))
+	var poll_ms := maxi(25, int(params.get("poll_ms", 100)))
+	var waited := 0
+	var ok := _wait_condition(params)
+	while not ok and waited < wait_ms:
+		await get_tree().create_timer(float(poll_ms) / 1000.0).timeout
+		waited += poll_ms
+		ok = _wait_condition(params)
+	return {"satisfied": ok, "waited_ms": waited}
+
+
+func _wait_condition(params: Dictionary) -> bool:
+	if params.has("node"):
+		return get_node_or_null(String(params["node"])) != null
+	if params.has("button_text"):
+		return _find_button(get_tree().root, String(params["button_text"]).to_lower()) != null
+	if params.has("property"):
+		var p: Dictionary = params["property"]
+		var n := get_node_or_null(String(p.get("path", "")))
+		return n != null and str(n.get(String(p.get("name", "")))) == str(p.get("equals"))
+	return false
+
+
+func _perf(_params: Dictionary) -> Dictionary:
+	return {
+		"fps": Performance.get_monitor(Performance.TIME_FPS),
+		"process_ms": Performance.get_monitor(Performance.TIME_PROCESS) * 1000.0,
+		"physics_ms": Performance.get_monitor(Performance.TIME_PHYSICS_PROCESS) * 1000.0,
+		"static_memory_mb": Performance.get_monitor(Performance.MEMORY_STATIC) / 1048576.0,
+		"objects": int(Performance.get_monitor(Performance.OBJECT_COUNT)),
+		"nodes": int(Performance.get_monitor(Performance.OBJECT_NODE_COUNT)),
+		"orphan_nodes": int(Performance.get_monitor(Performance.OBJECT_ORPHAN_NODE_COUNT)),
+		"resources": int(Performance.get_monitor(Performance.OBJECT_RESOURCE_COUNT)),
+		"draw_calls": int(Performance.get_monitor(Performance.RENDER_TOTAL_DRAW_CALLS_IN_FRAME)),
+		"video_memory_mb": Performance.get_monitor(Performance.RENDER_VIDEO_MEM_USED) / 1048576.0,
+	}
+
+
+func _capture(params: Dictionary) -> Dictionary:
+	var save_dir := String(params.get("save_dir", ""))
+	if save_dir == "":
+		return {"__error": "capture: 'save_dir' is required"}
+	var count := clampi(int(params.get("count", 8)), 1, 60)
+	var interval_ms := clampi(int(params.get("interval_ms", 200)), 16, 2000)
+	var prefix := String(params.get("prefix", "frame"))
+	DirAccess.make_dir_recursive_absolute(ProjectSettings.globalize_path(save_dir) if save_dir.begins_with("user://") or save_dir.begins_with("res://") else save_dir)
+	var paths: Array = []
+	for i in count:
+		await RenderingServer.frame_post_draw
+		var img := get_viewport().get_texture().get_image()
+		if img == null:
+			return {"__error": "capture: no viewport image at frame %d" % i}
+		var path := "%s/%s_%03d.png" % [save_dir.trim_suffix("/"), prefix, i]
+		var err := img.save_png(path)
+		if err != OK:
+			return {"__error": "capture: save_png failed (err %d) for %s" % [err, path]}
+		paths.append(path)
+		if i < count - 1:
+			await get_tree().create_timer(float(interval_ms) / 1000.0).timeout
+	return {"frames": paths, "count": paths.size(), "interval_ms": interval_ms}

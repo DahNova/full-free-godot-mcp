@@ -32,6 +32,7 @@ var router: RefCounted = null   # router.gd instance
 
 var _tcp := TCPServer.new()
 var _peers: Array[WebSocketPeer] = []
+var _ctrl_re: RegEx = null
 
 
 func _ready() -> void:
@@ -112,5 +113,14 @@ func _dispatch(ws: WebSocketPeer, id, method: String, params) -> void:
 
 
 func _send(ws: WebSocketPeer, msg: Dictionary) -> void:
-	if ws.get_ready_state() == WebSocketPeer.STATE_OPEN:
-		ws.send_text(JSON.stringify(msg))
+	if ws.get_ready_state() != WebSocketPeer.STATE_OPEN:
+		return
+	var text := JSON.stringify(msg)
+	# Godot's JSON.stringify escapes \n and \" but LEAKS other raw control
+	# bytes (CR, ANSI ESC, ...) straight through string values — strict JSON
+	# parsers on the other end reject those. After stringify every legitimate
+	# control char is already escaped, so any raw one left IS a leak: strip.
+	if _ctrl_re == null:
+		_ctrl_re = RegEx.new()
+		_ctrl_re.compile("[\\x{00}-\\x{1F}]")
+	ws.send_text(_ctrl_re.sub(text, "", true))

@@ -29,6 +29,15 @@ func register(router: RefCounted) -> void:
 		"Set one property on a live node; the JSON value is coerced onto the property's current type.")
 	router.register("game_click", func(p): return await _relay("click", p, p.get("timeout_ms", 5000)),
 		"Press the first visible, enabled Button whose text contains `text` (case-insensitive).")
+	router.register("game_input", func(p): return await _relay("input", p, p.get("timeout_ms", 5000)),
+		"Send a synthetic input event: key tap, mouse click at coordinates, or input-map action.")
+	router.register("game_wait", func(p): return await _relay("wait", p, int(p.get("wait_ms", 5000)) + 3000),
+		"Block until a node exists / a button with text is visible / a property equals a value, or wait_ms elapses.")
+	router.register("game_perf", func(p): return await _relay("perf", p, p.get("timeout_ms", 5000)),
+		"Snapshot the game's performance monitors: FPS, frame times, memory, node/orphan counts, draw calls.")
+	router.register("game_capture", func(p): return await _relay("capture", p,
+			int(p.get("count", 8)) * int(p.get("interval_ms", 200)) + 8000),
+		"Capture a burst of sequential frames as PNGs into save_dir (for reviewing animations).")
 
 
 func _relay(method: String, params: Dictionary, timeout_ms) -> Dictionary:

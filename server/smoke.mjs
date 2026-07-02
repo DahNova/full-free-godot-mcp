@@ -61,13 +61,37 @@ ws.on("open", async () => {
   await check("run_scene guard", () => call("run_scene", {}), true);
   await check("editor_screenshot", () => call("editor_screenshot", { save_path: `${SHOTS}/foss_editor.png` }));
   await check("unknown method", () => call("no_such_method"), true);
+  await check("validate_scripts", async () => {
+    const r = await call("validate_scripts", {}, 60000);
+    return { checked: r.checked, ok: r.ok, failed: r.failed };
+  });
+  await check("run_tests", async () => {
+    const r = await call("run_tests", {}, 200000);
+    return { all_passed: r.all_passed, tests: r.tests, passing: r.passing };
+  });
 
   if (!wasPlaying) {
     await check("run_scene title", () => call("run_scene", { path: "res://game/flow/game_root.tscn" }));
-    await new Promise((r) => setTimeout(r, 4000)); // let the game boot
+    await check("game_wait PLAY button", async () => {
+      const r = await call("game_wait", { button_text: "PLAY", wait_ms: 15000 }, 20000);
+      if (!r.satisfied) throw new Error("PLAY button never appeared");
+      return r;
+    });
     await check("game_tree", async () => {
       const r = await call("game_tree", { max_depth: 2 });
       return { from: r.from, root: r.tree?.name };
+    });
+    await check("game_perf", async () => {
+      const r = await call("game_perf");
+      if (typeof r.fps !== "number") throw new Error("no fps in perf snapshot");
+      return { fps: r.fps, nodes: r.nodes, orphans: r.orphan_nodes, mem_mb: Math.round(r.static_memory_mb) };
+    });
+    await check("game_input key", () => call("game_input", { kind: "key", key: "F" }));
+    await check("game_input action", () => call("game_input", { kind: "action", action: "ui_accept" }));
+    await check("game_input bad key", () => call("game_input", { kind: "key", key: "NotAKey" }), true);
+    await check("game_capture", async () => {
+      const r = await call("game_capture", { save_dir: SHOTS, count: 4, interval_ms: 150, prefix: "burst" }, 30000);
+      return { count: r.count, first: r.frames?.[0] };
     });
     await check("game_exec await", () =>
       call("game_exec", {

@@ -164,6 +164,97 @@ export const TOOLS = [
     },
   },
   {
+    name: "validate_scripts",
+    description:
+      "[editor] Compile-check GDScript files WITHOUT running anything — proactive parse-error detection. Defaults to every .gd under res:// (addons excluded); or pass paths[].",
+    inputSchema: {
+      type: "object",
+      properties: {
+        paths: { type: "array", items: { type: "string" }, description: "Specific res:// script paths." },
+        include_addons: { type: "boolean", description: "Also check addons/ (default false)." },
+      },
+      additionalProperties: false,
+    },
+  },
+  {
+    name: "run_tests",
+    description:
+      "[editor] Run the project's GUT test suite headless in a separate Godot process and return {all_passed, tests, passing, failing, tail}. Requires the GUT addon in the host project.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        dir: { type: "string", description: "Test directory (default res://test/unit)." },
+        timeout_ms: { type: "number", description: "Kill-wait budget (default 180000)." },
+      },
+      additionalProperties: false,
+    },
+  },
+  {
+    name: "game_input",
+    description:
+      "[game] Send a synthetic input event: kind='key' (Godot key name, e.g. Enter/Escape/A), kind='mouse' (x,y + button), or kind='action' (input-map action). tap=true (default) sends press+release.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        kind: { type: "string", enum: ["key", "mouse", "action"], description: "Event family." },
+        key: { type: "string", description: "Key name for kind=key." },
+        x: { type: "number", description: "Mouse x for kind=mouse." },
+        y: { type: "number", description: "Mouse y for kind=mouse." },
+        button: { type: "number", description: "Mouse button index (default 1 = left)." },
+        action: { type: "string", description: "Input-map action for kind=action." },
+        tap: { type: "boolean", description: "Press+release (default true); false = press only." },
+      },
+      required: ["kind"],
+      additionalProperties: false,
+    },
+  },
+  {
+    name: "game_wait",
+    description:
+      "[game] Block until a condition holds or wait_ms elapses: a node exists, a visible enabled button matching button_text exists, or property {path,name,equals} matches. The clean way to ride out fades/async transitions before acting.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        node: { type: "string", description: "Absolute node path that must exist." },
+        button_text: { type: "string", description: "Button label substring that must be clickable." },
+        property: {
+          type: "object",
+          properties: {
+            path: { type: "string" },
+            name: { type: "string" },
+            equals: { description: "Stringified comparison value." },
+          },
+          description: "Property equality condition.",
+        },
+        wait_ms: { type: "number", description: "Max wait (default 5000)." },
+        poll_ms: { type: "number", description: "Poll interval (default 100)." },
+      },
+      additionalProperties: false,
+    },
+  },
+  {
+    name: "game_perf",
+    description:
+      "[game] Snapshot performance monitors: fps, process/physics ms, static memory MB, object/node/orphan-node/resource counts, draw calls, video memory MB. Catch leaks and runaways early.",
+    inputSchema: { type: "object", properties: {}, additionalProperties: false },
+  },
+  {
+    name: "game_capture",
+    description:
+      "[game] Capture a burst of sequential frames as PNGs into save_dir (animation/juice review). Returns the frame paths.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        save_dir: { type: "string", description: "Destination directory (absolute or user://)." },
+        count: { type: "number", description: "Frames to capture, 1-60 (default 8)." },
+        interval_ms: { type: "number", description: "Delay between frames, 16-2000 (default 200)." },
+        prefix: { type: "string", description: "Filename prefix (default 'frame')." },
+      },
+      required: ["save_dir"],
+      additionalProperties: false,
+    },
+  },
+  {
     name: "foss_call",
     description:
       "[bridge] Escape hatch: invoke any bridge method by name with free-form params (see editor_status.methods).",
@@ -187,4 +278,10 @@ export const TIMEOUTS = {
   game_node: 8000,
   game_set: 8000,
   game_click: 8000,
+  game_input: 8000,
+  game_wait: 70000,     // the addon relay already budgets wait_ms + 3s
+  game_perf: 8000,
+  game_capture: 130000, // the addon relay budgets count*interval + 8s
+  run_tests: 200000,
+  validate_scripts: 60000,
 };
